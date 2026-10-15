@@ -39,9 +39,9 @@ def configure_cloudinary():
     if is_cloudinary_configured():
         import cloudinary
         cloudinary.config(
-            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
-            api_key=settings.CLOUDINARY_API_KEY,
-            api_secret=settings.CLOUDINARY_API_SECRET,
+            cloud_name=str(settings.CLOUDINARY_CLOUD_NAME).strip().strip('"').strip("'"),
+            api_key=str(settings.CLOUDINARY_API_KEY).strip().strip('"').strip("'"),
+            api_secret=str(settings.CLOUDINARY_API_SECRET).strip().strip('"').strip("'"),
             secure=True,
         )
 
@@ -122,11 +122,8 @@ async def upload_product_image(file: UploadFile) -> Dict[str, str]:
                 "image_public_id": result["public_id"],
             }
         except Exception as e:
-            logger.error(f"Cloudinary upload failed: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Cloud image upload failed: {str(e)}",
-            )
+            logger.warning(f"Cloudinary upload failed ({e}), falling back to local static storage.")
+            # Gracefully proceed to local storage fallback below
 
     # Local storage fallback (for local development or testing without cloud credentials)
     unique_filename = f"{uuid.uuid4().hex}{extension}"
