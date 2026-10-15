@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
-from app.core.security import verify_password, create_access_token
-from app.core.permissions import get_current_user
+from app.core.security import verify_password, create_access_token, hash_password
+from app.core.permissions import get_current_user, require_admin
 from app.database import get_db
 from app.models.user import User
 from app.schemas.auth import TokenResponse
-from app.schemas.user import UserResponse
+from app.schemas.user import UserResponse, UserCreate
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -120,3 +121,62 @@ async def login(
 def get_current_user_profile(current_user: User = Depends(get_current_user)):
     """Return profile details for the currently authenticated user (Admin or User)."""
     return UserResponse.model_validate(current_user)
+
+
+@router.post(
+    "/users",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new user account (Admin only)",
+)
+def create_user(
+    user_in: UserCreate,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Create a new user account. Accessible by Administrator only."""
+    clean_username = user_in.username.strip()
+    if not clean_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username cannot be empty",
+        )
+
+    # Check for duplicate username (case-insensitive)
+    existing_user = db.query(User).filter(User.username.ilike(clean_username)).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Username '{clean_username}' already exists.",
+        )
+
+    # Hash the password with bcrypt
+    hashed_pwd = hash_password(user_in.password)
+
+    new_user = User(
+        username=clean_username,
+        hashed_password=hashed_pwd,
+        role=user_in.role or "user",
+        is_active=True,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+
+@router.get(
+    "/users",
+    response_model=List[UserResponse],
+    summary="List user accounts (Admin only)",
+)
+def list_users(
+    skip: int = Query(0, ge=0, description="Items to skip for pagination"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum items to return"),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """List all user accounts with pagination. Accessible by Administrator only."""
+    users = db.query(User).order_by(User.id.asc()).offset(skip).limit(limit).all()
+    return users
+

@@ -401,3 +401,60 @@ async def test_product_crud_with_image_and_replacement(auth_tokens):
         del_resp = await client.delete(f"/products/{product_id}", headers=auth_tokens["admin_headers"])
         assert del_resp.status_code == 200
 
+
+# 22. Search handles leading and trailing whitespace
+@pytest.mark.anyio
+async def test_search_handles_whitespace(auth_tokens, seeded_products):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/products?search=  salt  ", headers=auth_tokens["admin_headers"])
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) >= 1
+        assert any(item["name"] == "Tata Salt" for item in data)
+
+
+# 23. Search matches category names where appropriate
+@pytest.mark.anyio
+async def test_search_matches_category(auth_tokens, seeded_products):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Searching "Dairy" matches products with category "Dairy" even if "dairy" is not in name
+        response = await client.get("/products?search=dairy", headers=auth_tokens["admin_headers"])
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) >= 1
+        assert any(item["name"] == "Amul Butter" for item in data)
+
+
+# 24. Distinct categories endpoint returns categories and respects active status
+@pytest.mark.anyio
+async def test_list_categories_endpoint(auth_tokens, seeded_products):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Admin sees categories for both active and inactive items
+        admin_resp = await client.get("/products/categories", headers=auth_tokens["admin_headers"])
+        assert admin_resp.status_code == 200
+        admin_cats = admin_resp.json()
+        assert "Grocery" in admin_cats
+        assert "Dairy" in admin_cats
+        assert "Grains" in admin_cats
+        assert "Beverages" in admin_cats  # Discontinued Tea category
+
+        # Regular user only sees categories of active products
+        user_resp = await client.get("/products/categories", headers=auth_tokens["user_headers"])
+        assert user_resp.status_code == 200
+        user_cats = user_resp.json()
+        assert "Grocery" in user_cats
+        assert "Dairy" in user_cats
+        assert "Grains" in user_cats
+        assert "Beverages" not in user_cats  # Only inactive product was Beverages
+
+
+# 25. Category filter with 'All' or 'all' returns all authorized items
+@pytest.mark.anyio
+async def test_category_all_returns_all_products(auth_tokens, seeded_products):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/products?category=All", headers=auth_tokens["user_headers"])
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 3  # All 3 active products
+
+

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.core.permissions import get_current_user, require_admin
 from app.core.storage import upload_product_image, delete_product_image
@@ -36,17 +37,49 @@ def list_products(
     elif is_active is not None:
         query = query.filter(Product.is_active == is_active)
 
-    # Search filter (case-insensitive)
+    # Search filter (case-insensitive across product name and category)
     if search and search.strip():
-        query = query.filter(Product.name.ilike(f"%{search.strip()}%"))
+        clean_search = search.strip()
+        query = query.filter(
+            or_(
+                Product.name.ilike(f"%{clean_search}%"),
+                Product.category.ilike(f"%{clean_search}%"),
+            )
+        )
 
-    # Category filter (case-insensitive)
-    if category and category.strip():
+    # Category filter (case-insensitive, ignoring "all")
+    if category and category.strip() and category.strip().lower() != "all":
         query = query.filter(Product.category.ilike(category.strip()))
 
     # Order products alphabetically by name, then apply pagination
     products = query.order_by(Product.name.asc()).offset(skip).limit(limit).all()
     return products
+
+
+@router.get("/categories", response_model=List[str], summary="Get list of all distinct product categories")
+def list_categories(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retrieve all unique product categories available in the inventory.
+    Regular users only see categories of active products.
+    """
+    query = db.query(Product.category).filter(Product.category.isnot(None))
+    if current_user.role != "admin":
+        query = query.filter(Product.is_active.is_(True))
+
+    categories = [
+        cat[0].strip()
+        for cat in query.distinct().order_by(Product.category.asc()).all()
+        if cat[0] and cat[0].strip()
+    ]
+    seen = set()
+    unique_cats = []
+    for c in categories:
+        if c.lower() not in seen:
+            seen.add(c.lower())
+            unique_cats.append(c)
+    return unique_cats
 
 
 @router.get("/{product_id}", response_model=ProductResponse, summary="Get single product details by ID")
@@ -134,13 +167,14 @@ def update_product(
         )
 
     update_data = product_in.model_dump(exclude_unset=True)
-    
-    # If image asset is being replaced or explicitly removed, delete the old image asset
+
+    # Track if old image asset should be cleaned up after successful DB commit
     old_public_id = product.image_public_id
+    needs_cloudinary_delete = False
     if "image_public_id" in update_data:
         new_public_id = update_data["image_public_id"]
         if old_public_id and old_public_id != new_public_id:
-            delete_product_image(old_public_id)
+            needs_cloudinary_delete = True
 
     for field, value in update_data.items():
         setattr(product, field, value)
@@ -150,6 +184,11 @@ def update_product(
 
     db.commit()
     db.refresh(product)
+
+    # Safely clean up old asset only AFTER database commit succeeds
+    if needs_cloudinary_delete:
+        delete_product_image(old_public_id)
+
     return product
 
 
