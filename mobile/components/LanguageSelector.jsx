@@ -6,7 +6,7 @@ import { COLORS, RADIUS, SPACING } from '../constants/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function LanguageSelector({ compact = false }) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const currentLang = i18n.language || 'mr';
 
   const handleSelect = (lang) => {
@@ -20,7 +20,7 @@ export default function LanguageSelector({ compact = false }) {
       {!compact && (
         <View style={styles.labelRow}>
           <MaterialCommunityIcons name="translate" size={16} color={COLORS.textSecondary} />
-          <Text style={styles.headerLabel}>भाषा / Language</Text>
+          <Text style={styles.headerLabel}>{t('common.select_language')}</Text>
         </View>
       )}
       <View style={styles.toggleGroup}>
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   },
   toggleGroup: {
     flexDirection: 'row',
-    backgroundColor: '#E2E8F0',
+    backgroundColor: COLORS.border,
     borderRadius: RADIUS.full,
     padding: 3,
   },

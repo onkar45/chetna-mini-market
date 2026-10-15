@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Retail Rate Manager",
-    "slug": "retail-rate-manager",
+    "name": "Chetna Mini Market",
+    "slug": "chetna-mini-market",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -11,11 +11,15 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#452477",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.onk45.chetnaminimarket"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -30,7 +34,15 @@
           "photosPermission": "The app accesses your photos to let you choose product images for Chetna Mini Market.",
           "cameraPermission": "The app accesses your camera to let you take product photos for Chetna Mini Market."
         }
-      ]
-    ]
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "304fa9e5-3036-4d46-ac16-98169bbb5107"
+      }
+    },
+    "owner": "onk45"
   }
 }

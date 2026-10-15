@@ -4,7 +4,8 @@
     "tagline": "Your Store, Your Rates",
     "login_subtitle": "Sign in to manage product inventory & pricing",
     "tag_admin": "ADMIN",
-    "tag_user": "USER"
+    "tag_user": "USER",
+    "server_api": "API: {{url}}"
   },
   "auth": {
     "username": "Username",
@@ -23,6 +24,38 @@
     "logout_confirm_title": "Logout",
     "logout_confirm_message": "Are you sure you want to log out of Chetna Mini Market?"
   },
+  "users": {
+    "management_title": "User Management",
+    "create_user": "Create User",
+    "create_user_title": "Create New User Account",
+    "create_user_sub": "Add staff or administrative accounts to manage rates and inventory.",
+    "user_list": "User Accounts",
+    "username": "Username",
+    "username_placeholder": "Enter username (min. 3 characters)",
+    "password": "Password",
+    "password_placeholder": "Enter password (min. 6 characters)",
+    "confirm_password": "Confirm Password",
+    "confirm_password_placeholder": "Re-enter password",
+    "role": "Role",
+    "role_user": "User (Rate Viewer)",
+    "role_admin": "Admin (Full Access)",
+    "status": "Status",
+    "active": "Active",
+    "inactive": "Inactive",
+    "created_at": "Created",
+    "create_btn": "Create Account",
+    "creating": "Creating Account...",
+    "user_created_success": "User account '{{username}}' created successfully.",
+    "username_required": "Username is required (minimum 3 characters).",
+    "password_required": "Password is required (minimum 6 characters).",
+    "passwords_must_match": "Passwords do not match.",
+    "duplicate_username": "Username already exists. Please choose a different username.",
+    "access_denied": "Access Denied: Only administrators can access User Management.",
+    "no_users": "No User Accounts",
+    "no_users_sub": "Created user accounts will appear here.",
+    "loading": "Loading user accounts...",
+    "load_failed": "Failed to load user accounts."
+  },
   "products": {
     "title": "Products",
     "search_placeholder": "Search products by name...",
@@ -32,7 +65,7 @@
     "no_matching": "No Matching Products",
     "no_matching_sub": "Try searching with a different term or clearing category filter.",
     "no_products": "No Products Yet",
-    "no_products_admin_sub": "Add your first store product by tapping the green button below.",
+    "no_products_admin_sub": "Add your first store product by tapping the button below.",
     "no_products_user_sub": "Products will appear here once the shopkeeper adds them.",
     "reset_filters": "Reset Filters",
     "updated": "Updated",
@@ -97,6 +130,8 @@
     "gallery_permission_msg": "Photo gallery access is needed to select product images.",
     "permission_denied": "Permission was denied. You can still save the product without a photo.",
     "upload_failed": "Failed to upload photo. Please check your network connection and try again.",
+    "upload_failed_hint": "Would you like to save the product without this photo?",
+    "save_without_photo": "Save Without Photo",
     "invalid_type": "Please select a valid image file (JPEG, PNG, or WEBP)."
   },
   "categories": {
@@ -110,13 +145,29 @@
     "personal_care": "Personal Care",
     "household": "Household"
   },
+  "units": {
+    "kg": "kg",
+    "gram": "gram",
+    "litre": "litre",
+    "ml": "ml",
+    "packet": "packet",
+    "piece": "piece",
+    "box": "box",
+    "bottle": "bottle",
+    "dozen": "dozen"
+  },
   "common": {
     "retry": "Try Again",
     "back": "Back",
     "close": "Close",
     "language": "Language",
+    "select_language": "Select Language",
     "lang_mr": "मराठी",
     "lang_en": "English",
-    "switch_lang": "मराठी"
+    "switch_lang": "मराठी",
+    "offline_mode": "Offline mode — Showing cached session",
+    "connection_timeout": "Connection Timeout",
+    "login_other_account": "Log in with another account",
+    "na": "N/A"
   }
 }

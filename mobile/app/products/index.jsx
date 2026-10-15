@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,17 +16,18 @@ import { useAuth } from '../../context/AuthContext';
 import { productsService } from '../../services/products';
 import ProductCard from '../../components/ProductCard';
 import SearchBar from '../../components/SearchBar';
-import CategoryFilter from '../../components/CategoryFilter';
+import CategoryFilter, { DEFAULT_CATEGORIES } from '../../components/CategoryFilter';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import LanguageSelector from '../../components/LanguageSelector';
+import AppLogo from '../../components/AppLogo';
 import { COLORS, SPACING, RADIUS } from '../../constants/theme';
 
 export default function ProductListScreen() {
   const router = useRouter();
-  const { user, isAdmin, isAuthenticated, isLoading: isAuthLoading, logout } = useAuth();
+  const { user, isAdmin, isAuthenticated, isLoading: isAuthLoading, isOffline, refreshProfile, logout } = useAuth();
   const { t, i18n } = useTranslation();
 
   const [products, setProducts] = useState([]);
@@ -36,6 +37,11 @@ export default function ProductListScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [availableCategories, setAvailableCategories] = useState(DEFAULT_CATEGORIES);
+
+  // Request race-condition and cancellation tracking refs
+  const abortControllerRef = useRef(null);
+  const requestIdRef = useRef(0);
 
   // Deletion Confirmation State
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
@@ -51,24 +57,94 @@ export default function ProductListScreen() {
     }
   }, [isAuthLoading, isAuthenticated, router]);
 
+  // Clean up any pending network request when component unmounts
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Stable category merge helper: preserves all previously discovered categories
+  const mergeCategories = useCallback((newCategories = []) => {
+    if (!newCategories || newCategories.length === 0) return;
+    setAvailableCategories((prev) => {
+      const set = new Set(prev);
+      newCategories.forEach((cat) => {
+        if (cat && typeof cat === 'string' && cat.trim()) {
+          set.add(cat.trim());
+        }
+      });
+      const list = Array.from(set).filter((c) => c !== 'All');
+      return ['All', ...list];
+    });
+  }, []);
+
+  // Fetch stable categories from backend on boot
+  const loadCategories = useCallback(async () => {
+    try {
+      const serverCategories = await productsService.getCategories();
+      if (Array.isArray(serverCategories) && serverCategories.length > 0) {
+        mergeCategories(serverCategories);
+      }
+    } catch (e) {
+      // Non-critical, fallback categories in DEFAULT_CATEGORIES remain available
+    }
+  }, [mergeCategories]);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
+
   const fetchProducts = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setIsLoading(true);
     setErrorMessage(null);
 
+    // Cancel obsolete in-flight request to prevent race conditions
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const currentRequestId = ++requestIdRef.current;
+
     try {
+      const trimmedSearch = searchQuery.trim();
       const data = await productsService.getProducts({
-        search: searchQuery,
+        search: trimmedSearch,
         category: selectedCategory,
+        signal: controller.signal,
       });
-      setProducts(data);
+
+      // Stale response guard: only apply if this is still the active request
+      if (currentRequestId === requestIdRef.current) {
+        setProducts(data);
+        const dynamicCats = data.map((p) => p.category).filter(Boolean);
+        if (dynamicCats.length > 0) {
+          mergeCategories(dynamicCats);
+        }
+      }
     } catch (err) {
+      // Ignore canceled/aborted or superseded requests
+      if (
+        controller.signal.aborted ||
+        err.name === 'CanceledError' ||
+        err.name === 'AbortError' ||
+        currentRequestId !== requestIdRef.current
+      ) {
+        return;
+      }
       setErrorMessage(err.friendlyMessage || t('products.load_failed'));
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (currentRequestId === requestIdRef.current) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
-  }, [searchQuery, selectedCategory, t]);
+  }, [searchQuery, selectedCategory, mergeCategories, t]);
 
+  // Debounced search / filter trigger (250ms)
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchProducts();
@@ -79,6 +155,7 @@ export default function ProductListScreen() {
 
   const handleRefresh = () => {
     setIsRefreshing(true);
+    loadCategories();
     fetchProducts(true);
   };
 
@@ -100,14 +177,6 @@ export default function ProductListScreen() {
     router.replace('/login');
   };
 
-  const categories = useMemo(() => {
-    const defaultCats = ['All', 'Grocery', 'Dairy', 'Grains', 'Beverages', 'Spices', 'Snacks'];
-    const dynamicCats = products
-      .map((p) => p.category)
-      .filter((cat) => Boolean(cat) && !defaultCats.includes(cat));
-    return [...defaultCats, ...new Set(dynamicCats)];
-  }, [products]);
-
   const roleTagLabel = isAdmin ? t('app.tag_admin') : t('app.tag_user');
 
   return (
@@ -118,9 +187,7 @@ export default function ProductListScreen() {
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
           <View style={styles.storeBranding}>
-            <View style={styles.storeIconWrap}>
-              <MaterialCommunityIcons name="storefront" size={24} color={COLORS.primary} />
-            </View>
+            <AppLogo size={36} style={{ marginRight: SPACING.sm }} />
             <View>
               <Text style={styles.storeTitle}>{t('app.name')}</Text>
               <Text style={styles.storeTagline}>{t('app.tagline')}</Text>
@@ -130,8 +197,19 @@ export default function ProductListScreen() {
           <View style={styles.userControls}>
             <LanguageSelector compact={true} />
 
+            {isAdmin ? (
+              <TouchableOpacity
+                style={styles.adminUsersButton}
+                onPress={() => router.push('/admin/users')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel={t('users.management_title')}
+              >
+                <MaterialCommunityIcons name="account-cog-outline" size={20} color={COLORS.primary} />
+              </TouchableOpacity>
+            ) : null}
+
             <View style={styles.userBadge}>
-              <Text style={styles.usernameText} numberOfLines={1}>{user?.username || 'User'}</Text>
+              <Text style={styles.usernameText} numberOfLines={1}>{user?.username || t('common.user')}</Text>
               <View style={[styles.roleTag, isAdmin ? styles.roleTagAdmin : styles.roleTagUser]}>
                 <Text style={styles.roleTagText}>{roleTagLabel}</Text>
               </View>
@@ -148,6 +226,23 @@ export default function ProductListScreen() {
         </View>
       </View>
 
+      {/* Offline Mode Banner */}
+      {isOffline ? (
+        <View style={styles.offlineBanner}>
+          <MaterialCommunityIcons name="cloud-off-outline" size={16} color="#B45309" style={{ marginRight: 6 }} />
+          <Text style={styles.offlineBannerText}>
+            {t('common.offline_mode') || 'Offline mode — Showing cached session'}
+          </Text>
+          <TouchableOpacity
+            style={styles.offlineRetryBtn}
+            onPress={() => refreshProfile()}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.offlineRetryText}>{t('common.retry') || 'Retry'}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <SearchBar
@@ -161,7 +256,7 @@ export default function ProductListScreen() {
       {/* Category Pills Bar */}
       <View style={styles.categoryContainer}>
         <CategoryFilter
-          categories={categories}
+          categories={availableCategories}
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
         />
@@ -305,6 +400,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.xs,
   },
+  adminUsersButton: {
+    padding: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.primaryLight,
+  },
   userBadge: {
     alignItems: 'flex-end',
     marginRight: 2,
@@ -375,5 +475,32 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 14,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDE68A',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+  },
+  offlineBannerText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  offlineRetryBtn: {
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+    marginLeft: 6,
+  },
+  offlineRetryText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

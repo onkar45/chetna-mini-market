@@ -32,4 +32,27 @@ export const authService = {
   async logout() {
     await storage.clearAll();
   },
+
+  /**
+   * Create a new user account (Admin only).
+   */
+  async createUser(userData) {
+    const payload = {
+      username: userData.username.trim(),
+      password: userData.password,
+      role: userData.role || 'user',
+    };
+    const response = await api.post('/auth/users', payload);
+    return response.data;
+  },
+
+  /**
+   * List all user accounts (Admin only).
+   */
+  async getUsers({ skip = 0, limit = 50 } = {}) {
+    const response = await api.get('/auth/users', {
+      params: { skip, limit },
+    });
+    return response.data;
+  },
 };

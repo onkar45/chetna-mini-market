@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { productsService } from '../services/products';
 import { resolveImageUrl } from '../constants/config';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
+import { formatCategory, formatUnit } from './CategoryFilter';
 
 const COMMON_UNITS = ['kg', 'gram', 'litre', 'ml', 'packet', 'piece'];
 const SUGGESTED_CATEGORIES = ['Grocery', 'Dairy', 'Grains', 'Beverages', 'Spices', 'Snacks'];
@@ -32,6 +33,7 @@ export default function ProductForm({
   errorMessage = null,
 }) {
   const { t } = useTranslation();
+  const scrollViewRef = useRef(null);
 
   const [name, setName] = useState(initialValues?.name || '');
   const [category, setCategory] = useState(initialValues?.category || '');
@@ -43,13 +45,37 @@ export default function ProductForm({
   const [isActive, setIsActive] = useState(initialValues?.is_active ?? true);
 
   // Photo state
-  const [imageUrl, setImageUrl] = useState(initialValues?.image_url || null);
-  const [imagePublicId, setImagePublicId] = useState(initialValues?.image_public_id || null);
-  const [localUri, setLocalUri] = useState(null);
+  const [savedImageUrl, setSavedImageUrl] = useState(initialValues?.image_url || null);
+  const [savedImagePublicId, setSavedImagePublicId] = useState(initialValues?.image_public_id || null);
+  const [pendingLocalUri, setPendingLocalUri] = useState(null);
+  const [isImageRemoved, setIsImageRemoved] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState(null);
 
   const [errors, setErrors] = useState({});
+
+  // Recover any camera photo if Android OS destroyed the Activity while camera was open
+  useEffect(() => {
+    async function checkPendingImage() {
+      try {
+        if (ImagePicker.getPendingResultAsync) {
+          const pending = await ImagePicker.getPendingResultAsync();
+          if (pending) {
+            const isCanceled = Boolean(pending.canceled ?? pending.cancelled);
+            const photoUri = pending.assets?.[0]?.uri || pending.uri;
+            if (!isCanceled && photoUri) {
+              setPendingLocalUri(photoUri);
+              setIsImageRemoved(false);
+              setPhotoError(null);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to retrieve pending image picker result:', e);
+      }
+    }
+    checkPendingImage();
+  }, []);
 
   const validate = () => {
     const newErrors = {};
@@ -74,24 +100,6 @@ export default function ProductForm({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleUploadPhoto = async (uri) => {
-    setLocalUri(uri);
-    setIsUploadingPhoto(true);
-    setPhotoError(null);
-    try {
-      const data = await productsService.uploadProductImage(uri);
-      setImageUrl(data.image_url);
-      setImagePublicId(data.image_public_id);
-    } catch (err) {
-      console.warn('Upload photo error:', err);
-      const msg = err.friendlyMessage || t('photo.upload_failed');
-      setPhotoError(msg);
-      Alert.alert(t('photo.label'), msg);
-    } finally {
-      setIsUploadingPhoto(false);
-    }
-  };
-
   const handleTakePhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -105,13 +113,17 @@ export default function ProductForm({
 
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false, // Essential on Android: avoids camera cropper silent failure / cancellation
         quality: 0.7,
       });
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        await handleUploadPhoto(result.assets[0].uri);
+      const isCanceled = Boolean(result.canceled ?? result.cancelled);
+      const photoUri = result.assets?.[0]?.uri || result.uri;
+
+      if (!isCanceled && photoUri) {
+        setPendingLocalUri(photoUri);
+        setIsImageRemoved(false);
+        setPhotoError(null);
       }
     } catch (err) {
       console.warn('Camera launch failed:', err);
@@ -132,13 +144,17 @@ export default function ProductForm({
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false,
         quality: 0.7,
       });
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        await handleUploadPhoto(result.assets[0].uri);
+      const isCanceled = Boolean(result.canceled ?? result.cancelled);
+      const photoUri = result.assets?.[0]?.uri || result.uri;
+
+      if (!isCanceled && photoUri) {
+        setPendingLocalUri(photoUri);
+        setIsImageRemoved(false);
+        setPhotoError(null);
       }
     } catch (err) {
       console.warn('Gallery launch failed:', err);
@@ -147,33 +163,80 @@ export default function ProductForm({
   };
 
   const handleRemovePhoto = () => {
-    setImageUrl(null);
-    setImagePublicId(null);
-    setLocalUri(null);
+    setPendingLocalUri(null);
+    setIsImageRemoved(true);
     setPhotoError(null);
   };
 
+  const submitWithoutPhoto = () => {
+    setIsUploadingPhoto(false);
+    setPhotoError(null);
+    onSubmit({
+      name: name.trim(),
+      category: category.trim() || null,
+      rate: parseFloat(rate),
+      unit: unit.trim(),
+      description: description.trim() || null,
+      image_url: savedImageUrl || null,
+      image_public_id: savedImagePublicId || null,
+      is_active: isActive,
+    });
+  };
+
   const handleSubmit = async () => {
-    if (!validate()) return;
+    if (!validate()) {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
 
-    let finalImageUrl = imageUrl;
-    let finalImagePublicId = imagePublicId;
+    let finalImageUrl = savedImageUrl;
+    let finalImagePublicId = savedImagePublicId;
 
-    // If a photo was chosen but hasn't uploaded yet, attempt upload now
-    if (localUri && !finalImageUrl) {
+    // Single upload lifecycle: upload pending selection once on submit
+    if (pendingLocalUri) {
       setIsUploadingPhoto(true);
+      setPhotoError(null);
       try {
-        const data = await productsService.uploadProductImage(localUri);
-        finalImageUrl = data.image_url;
-        finalImagePublicId = data.image_public_id;
-        setImageUrl(data.image_url);
-        setImagePublicId(data.image_public_id);
+        const uploadResult = await productsService.uploadProductImage(pendingLocalUri);
+        finalImageUrl = uploadResult.image_url;
+        finalImagePublicId = uploadResult.image_public_id;
+        setSavedImageUrl(uploadResult.image_url);
+        setSavedImagePublicId(uploadResult.image_public_id);
+        setPendingLocalUri(null);
       } catch (err) {
         setIsUploadingPhoto(false);
-        Alert.alert(t('photo.label'), err.friendlyMessage || t('photo.upload_failed'));
-        return;
+        const errorMsg = err.friendlyMessage || t('photo.upload_failed');
+        setPhotoError(errorMsg);
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+
+        if (Platform.OS === 'web') {
+          const proceed = typeof window !== 'undefined' && window.confirm
+            ? window.confirm(`${t('photo.label')}: ${errorMsg}\n\n${t('photo.upload_failed_hint')}`)
+            : false;
+          if (proceed) {
+            submitWithoutPhoto();
+            return;
+          }
+        } else {
+          Alert.alert(
+            t('photo.label'),
+            `${errorMsg}\n\n${t('photo.upload_failed_hint')}`,
+            [
+              { text: t('common.cancel'), style: 'cancel' },
+              {
+                text: t('photo.save_without_photo'),
+                onPress: submitWithoutPhoto,
+              },
+            ]
+          );
+        }
+        return; // Preserve form state and pendingLocalUri for retry
+      } finally {
+        setIsUploadingPhoto(false);
       }
-      setIsUploadingPhoto(false);
+    } else if (isImageRemoved) {
+      finalImageUrl = null;
+      finalImagePublicId = null;
     }
 
     onSubmit({
@@ -182,20 +245,24 @@ export default function ProductForm({
       rate: parseFloat(rate),
       unit: unit.trim(),
       description: description.trim() || null,
-      image_url: finalImageUrl || null,
-      image_public_id: finalImagePublicId || null,
+      image_url: finalImageUrl,
+      image_public_id: finalImagePublicId,
       is_active: isActive,
     });
   };
 
-  const resolvedPreviewUrl = localUri || resolveImageUrl(imageUrl);
+  const resolvedPreviewUrl = pendingLocalUri
+    ? pendingLocalUri
+    : !isImageRemoved && savedImageUrl
+    ? resolveImageUrl(savedImageUrl)
+    : null;
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={{ flex: 1 }}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         {errorMessage ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>{errorMessage}</Text>
@@ -219,17 +286,27 @@ export default function ProductForm({
                 <TouchableOpacity
                   style={[styles.photoActionButton, styles.retakeButton]}
                   onPress={handleTakePhoto}
-                  disabled={isUploadingPhoto}
+                  disabled={isUploadingPhoto || isSubmitting}
                   activeOpacity={0.7}
                 >
-                  <MaterialCommunityIcons name="camera-retake-outline" size={16} color={COLORS.primaryDark} style={{ marginRight: 4 }} />
-                  <Text style={styles.retakeButtonText}>{t('photo.retake_photo')}</Text>
+                  <MaterialCommunityIcons name="camera" size={16} color={COLORS.primaryDark} style={{ marginRight: 4 }} />
+                  <Text style={styles.retakeButtonText}>{t('photo.take_photo')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.photoActionButton, styles.retakeButton]}
+                  onPress={handlePickGallery}
+                  disabled={isUploadingPhoto || isSubmitting}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons name="image-plus" size={16} color={COLORS.primaryDark} style={{ marginRight: 4 }} />
+                  <Text style={styles.retakeButtonText}>{t('photo.choose_gallery')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[styles.photoActionButton, styles.removePhotoButton]}
                   onPress={handleRemovePhoto}
-                  disabled={isUploadingPhoto}
+                  disabled={isUploadingPhoto || isSubmitting}
                   activeOpacity={0.7}
                 >
                   <MaterialCommunityIcons name="trash-can-outline" size={16} color={COLORS.danger} style={{ marginRight: 4 }} />
@@ -254,6 +331,7 @@ export default function ProductForm({
                       style={styles.captureButton}
                       onPress={handleTakePhoto}
                       activeOpacity={0.8}
+                      disabled={isSubmitting || isUploadingPhoto}
                     >
                       <MaterialCommunityIcons name="camera" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
                       <Text style={styles.captureButtonText}>{t('photo.take_photo')}</Text>
@@ -263,6 +341,7 @@ export default function ProductForm({
                       style={styles.galleryButton}
                       onPress={handlePickGallery}
                       activeOpacity={0.8}
+                      disabled={isSubmitting || isUploadingPhoto}
                     >
                       <MaterialCommunityIcons name="image-plus" size={18} color={COLORS.primaryDark} style={{ marginRight: 6 }} />
                       <Text style={styles.galleryButtonText}>{t('photo.choose_gallery')}</Text>
@@ -276,10 +355,10 @@ export default function ProductForm({
           {photoError && (
             <View style={styles.photoErrorBox}>
               <Text style={styles.photoErrorText}>{photoError}</Text>
-              {localUri && (
+              {pendingLocalUri && (
                 <TouchableOpacity
                   style={styles.retryUploadBtn}
-                  onPress={() => handleUploadPhoto(localUri)}
+                  onPress={handleSubmit}
                   activeOpacity={0.8}
                 >
                   <MaterialCommunityIcons name="reload" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
@@ -324,7 +403,7 @@ export default function ProductForm({
                 onPress={() => setCategory(cat)}
               >
                 <Text style={[styles.chipText, category === cat && styles.chipTextActive]}>
-                  {cat}
+                  {formatCategory(cat, t)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -375,7 +454,7 @@ export default function ProductForm({
                 }}
               >
                 <Text style={[styles.chipText, unit === u && styles.chipTextActive]}>
-                  {u}
+                  {formatUnit(u, t)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -407,12 +486,28 @@ export default function ProductForm({
           <Switch
             value={isActive}
             onValueChange={setIsActive}
-            trackColor={{ false: '#CBD5E1', true: COLORS.primaryLight }}
-            thumbColor={isActive ? COLORS.primary : '#94A3B8'}
+            trackColor={{ false: COLORS.border, true: COLORS.primaryLight }}
+            thumbColor={isActive ? COLORS.primary : COLORS.textMuted}
           />
         </View>
 
         {/* Action Buttons */}
+        {photoError && (
+          <View style={styles.bottomErrorBox}>
+            <View style={{ flex: 1, marginRight: SPACING.sm }}>
+              <Text style={styles.bottomErrorTitle}>{t('photo.upload_failed')}</Text>
+              <Text style={styles.bottomErrorSubtitle}>{photoError}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.saveWithoutPhotoBtn}
+              onPress={submitWithoutPhoto}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.saveWithoutPhotoBtnText}>{t('photo.save_without_photo')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.buttonRow}>
           {onCancel ? (
             <TouchableOpacity
@@ -431,7 +526,7 @@ export default function ProductForm({
             disabled={isSubmitting || isUploadingPhoto}
             activeOpacity={0.85}
           >
-            {isSubmitting ? (
+            {isSubmitting || isUploadingPhoto ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <Text style={styles.submitButtonText}>{submitLabel || t('form.save_product')}</Text>
@@ -754,6 +849,38 @@ const styles = StyleSheet.create({
   retryUploadBtnText: {
     color: '#FFFFFF',
     fontSize: 11,
+    fontWeight: '700',
+  },
+  bottomErrorBox: {
+    backgroundColor: COLORS.dangerLight,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bottomErrorTitle: {
+    color: COLORS.danger,
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  bottomErrorSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+  },
+  saveWithoutPhotoBtn: {
+    backgroundColor: COLORS.primaryDark,
+    paddingVertical: 8,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.sm,
+  },
+  saveWithoutPhotoBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '700',
   },
 });

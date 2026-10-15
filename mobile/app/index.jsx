@@ -1,40 +1,88 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import AppLogo from '../components/AppLogo';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 
 export default function IndexScreen() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, authError, retrySessionValidation, logout } = useAuth();
   const { t } = useTranslation();
+  const [isRetrying, setIsRetrying] = useState(false);
 
   useEffect(() => {
     if (!isLoading) {
       if (isAuthenticated) {
         router.replace('/products');
-      } else {
+      } else if (!authError) {
         router.replace('/login');
       }
     }
-  }, [isLoading, isAuthenticated, router]);
+  }, [isLoading, isAuthenticated, authError, router]);
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    try {
+      await retrySessionValidation();
+    } catch (e) {
+      // Error is caught and surfaced in AuthContext
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  const handleGoToLogin = async () => {
+    await logout();
+    router.replace('/login');
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.logoContainer}>
-        <View style={styles.logoCircle}>
-          <MaterialCommunityIcons name="storefront" size={54} color={COLORS.primary} />
-        </View>
+        <AppLogo size={108} style={styles.logoWrap} />
         <Text style={styles.title}>{t('app.name')}</Text>
         <Text style={styles.tagline}>{t('app.tagline')}</Text>
       </View>
 
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>{t('products.loading')}</Text>
-      </View>
+      {authError && !isAuthenticated ? (
+        <View style={styles.errorBox}>
+          <MaterialCommunityIcons name="wifi-off" size={32} color={COLORS.danger} style={{ marginBottom: 8 }} />
+          <Text style={styles.errorTitle}>{t('common.connection_timeout')}</Text>
+          <Text style={styles.errorDescription}>{authError}</Text>
+
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={handleRetry}
+            disabled={isRetrying}
+            activeOpacity={0.8}
+          >
+            {isRetrying ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <MaterialCommunityIcons name="reload" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.loginFallbackButton}
+            onPress={handleGoToLogin}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.loginFallbackText}>{t('common.login_other_account')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>{t('products.loading')}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -49,21 +97,10 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: SPACING.xl * 2,
+    marginBottom: SPACING.xl * 1.5,
   },
-  logoCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+  logoWrap: {
     marginBottom: SPACING.lg,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
   },
   title: {
     fontSize: 26,
@@ -86,5 +123,58 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textSecondary,
     fontWeight: '500',
+  },
+  errorBox: {
+    backgroundColor: COLORS.surface,
+    padding: SPACING.lg,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 320,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  errorDescription: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: SPACING.md,
+    lineHeight: 18,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: RADIUS.md,
+    width: '100%',
+    marginBottom: SPACING.sm,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  loginFallbackButton: {
+    paddingVertical: 6,
+  },
+  loginFallbackText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });

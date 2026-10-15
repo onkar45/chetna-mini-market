@@ -17,7 +17,7 @@ export default function RootLayout() {
           headerStyle: {
             backgroundColor: COLORS.surface,
           },
-          headerTintColor: COLORS.textPrimary,
+          headerTintColor: COLORS.primaryDark,
           headerTitleStyle: {
             fontWeight: '700',
             fontSize: 18,
@@ -65,6 +65,12 @@ export default function RootLayout() {
           options={{
             title: t('products.edit_product'),
             headerBackTitle: t('common.back'),
+          }}
+        />
+        <Stack.Screen
+          name="admin/users"
+          options={{
+            headerShown: false,
           }}
         />
       </Stack>

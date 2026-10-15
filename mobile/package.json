@@ -5,10 +5,12 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "axios": "^1.20.0",
-    "expo": "~57.0.28",
-    "expo-constants": "~57.0.21",
+    "expo": "~57.0.29",
+    "expo-constants": "~57.0.22",
+    "expo-font": "~57.0.4",
     "expo-image-picker": "~57.0.20",
-    "expo-router": "~57.0.26",
+    "expo-linking": "~57.0.13",
+    "expo-router": "~57.0.27",
     "expo-secure-store": "~57.0.4",
     "expo-status-bar": "~57.0.1",
     "i18next": "^26.4.5",
@@ -24,7 +26,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "node --test __tests__/*.test.js"
   },
   "private": true
 }

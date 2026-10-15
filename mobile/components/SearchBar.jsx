@@ -22,7 +22,13 @@ export default function SearchBar({ value, onChangeText, onClear, placeholder })
         autoCorrect={false}
       />
       {value ? (
-        <TouchableOpacity onPress={onClear} style={styles.clearButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity
+          onPress={onClear}
+          style={styles.clearButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.cancel')}
+        >
           <MaterialCommunityIcons name="close-circle" size={18} color={COLORS.textMuted} />
         </TouchableOpacity>
       ) : null}

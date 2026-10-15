@@ -4,7 +4,7 @@ import { storage } from './storage';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 12000,
+  timeout: 30000, // 30 seconds to accommodate Render free-tier cold starts
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',

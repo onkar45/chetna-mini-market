@@ -10,6 +10,8 @@ import { formatCurrency } from '../../services/i18n';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { formatCategory, formatUnit } from '../../components/CategoryFilter';
+import AppLogo from '../../components/AppLogo';
 import { COLORS, SPACING, RADIUS } from '../../constants/theme';
 
 export default function ProductDetailScreen() {
@@ -80,13 +82,13 @@ export default function ProductDetailScreen() {
         dateStyle: 'medium',
         timeStyle: 'short',
       })
-    : 'N/A';
+    : t('common.na');
 
   const formattedCreatedDate = product.created_at
     ? new Date(product.created_at).toLocaleDateString(locale, {
         dateStyle: 'medium',
       })
-    : 'N/A';
+    : t('common.na');
 
   const resolvedImage = resolveImageUrl(product.image_url);
 
@@ -102,8 +104,8 @@ export default function ProductDetailScreen() {
           />
         ) : (
           <View style={styles.placeholderBanner}>
-            <MaterialCommunityIcons name="storefront-outline" size={54} color={COLORS.primary} />
-            <Text style={styles.placeholderText}>Chetna Mini Market</Text>
+            <AppLogo size={64} style={{ marginBottom: SPACING.xs }} />
+            <Text style={styles.placeholderText}>{t('app.name')}</Text>
           </View>
         )}
       </View>
@@ -115,7 +117,7 @@ export default function ProductDetailScreen() {
           <View style={styles.badgeRow}>
             {product.category ? (
               <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeText}>{product.category}</Text>
+                <Text style={styles.categoryBadgeText}>{formatCategory(product.category, t)}</Text>
               </View>
             ) : null}
 
@@ -133,7 +135,7 @@ export default function ProductDetailScreen() {
           <View style={styles.priceRow}>
             <Text style={styles.currencySymbol}>₹</Text>
             <Text style={styles.rateValue}>{formattedRate}</Text>
-            <Text style={styles.unitText}> / {product.unit}</Text>
+            <Text style={styles.unitText}> / {formatUnit(product.unit, t)}</Text>
           </View>
         </View>
 
@@ -283,27 +285,27 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.sm,
   },
   activeBadge: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: COLORS.successLight,
   },
   inactiveBadge: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: COLORS.border,
   },
   statusBadgeText: {
     fontSize: 12,
     fontWeight: '700',
   },
   activeText: {
-    color: COLORS.primaryDark,
+    color: COLORS.success,
   },
   inactiveText: {
     color: COLORS.textSecondary,
   },
   rateBox: {
-    backgroundColor: '#F0FDF4',
+    backgroundColor: COLORS.primaryLight,
     padding: SPACING.lg,
     borderRadius: RADIUS.md,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: COLORS.border,
     marginBottom: SPACING.lg,
   },
   rateLabel: {

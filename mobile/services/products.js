@@ -5,9 +5,9 @@ import { storage } from './storage';
 
 export const productsService = {
   /**
-   * Fetch products with optional search, category, and pagination.
+   * Fetch products with optional search, category, pagination, and abort signal.
    */
-  async getProducts({ search = '', category = '', skip = 0, limit = 50, is_active } = {}) {
+  async getProducts({ search = '', category = '', skip = 0, limit = 50, is_active, signal } = {}) {
     const params = {};
     if (search && search.trim()) params.search = search.trim();
     if (category && category !== 'All') params.category = category.trim();
@@ -15,7 +15,18 @@ export const productsService = {
     if (skip > 0) params.skip = skip;
     if (limit) params.limit = limit;
 
-    const response = await api.get('/products', { params });
+    const config = { params };
+    if (signal) config.signal = signal;
+
+    const response = await api.get('/products', config);
+    return response.data;
+  },
+
+  /**
+   * Fetch list of distinct product categories.
+   */
+  async getCategories() {
+    const response = await api.get('/products/categories');
     return response.data;
   },
 
@@ -85,15 +96,26 @@ export const productsService = {
       try {
         const res = await fetch(fileUri);
         const blob = await res.blob();
-        formData.append('file', blob, filename);
+        if (typeof File !== 'undefined') {
+          const fileObj = new File([blob], filename, { type: blob.type || type });
+          formData.append('file', fileObj);
+        } else {
+          formData.append('file', blob, filename);
+        }
       } catch (blobErr) {
         console.warn('Fallback web blob fetch error:', blobErr);
-        formData.append('file', { uri: fileUri, name: filename, type });
+        const res = await fetch(fileUri);
+        const blob = await res.blob();
+        formData.append('file', blob, filename);
       }
     } else {
       // React Native Android/iOS native file upload
+      let normalizedUri = fileUri;
+      if (Platform.OS === 'android' && !fileUri.startsWith('file://') && !fileUri.startsWith('content://')) {
+        normalizedUri = `file://${fileUri}`;
+      }
       formData.append('file', {
-        uri: fileUri,
+        uri: normalizedUri,
         name: filename,
         type: type,
       });
@@ -105,35 +127,54 @@ export const productsService = {
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
-    // CRITICAL: DO NOT set 'Content-Type': 'multipart/form-data'!
-    // In React Native, fetch and FormData automatically inject 'multipart/form-data; boundary=...'
 
-    const response = await fetch(uploadUrl, {
-      method: 'POST',
-      body: formData,
-      headers: headers,
-    });
+    try {
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        body: formData,
+        headers: headers,
+      });
 
-    if (!response.ok) {
-      let errorMsg = `Upload failed (${response.status})`;
-      try {
-        const errJson = await response.json();
-        if (errJson.detail) {
-          errorMsg = typeof errJson.detail === 'string' 
-            ? errJson.detail 
-            : JSON.stringify(errJson.detail);
+      if (!response.ok) {
+        let errorMsg = `Upload failed (${response.status})`;
+        try {
+          const errJson = await response.json();
+          if (errJson.detail) {
+            errorMsg = typeof errJson.detail === 'string' 
+              ? errJson.detail 
+              : JSON.stringify(errJson.detail);
+          }
+        } catch (e) {
+          const text = await response.text().catch(() => '');
+          if (text) errorMsg = text;
         }
-      } catch (e) {
-        const text = await response.text().catch(() => '');
-        if (text) errorMsg = text;
+        const error = new Error(errorMsg);
+        error.friendlyMessage = errorMsg;
+        error.status = response.status;
+        throw error;
       }
-      const error = new Error(errorMsg);
-      error.friendlyMessage = errorMsg;
-      error.status = response.status;
-      throw error;
-    }
 
-    return await response.json();
+      return await response.json();
+    } catch (fetchErr) {
+      // If native fetch network error occurs, try Axios fallback
+      console.warn('Native fetch upload error, attempting Axios fallback:', fetchErr);
+      try {
+        const axiosHeaders = {};
+        if (token) axiosHeaders.Authorization = `Bearer ${token}`;
+        if (Platform.OS !== 'web') {
+          axiosHeaders['Content-Type'] = 'multipart/form-data';
+        }
+
+        const axiosRes = await api.post('/products/upload-image', formData, {
+          headers: axiosHeaders,
+          transformRequest: (data) => data,
+        });
+        return axiosRes.data;
+      } catch (axiosErr) {
+        console.error('All upload strategies failed:', axiosErr);
+        throw (fetchErr.status ? fetchErr : axiosErr);
+      }
+    }
   },
 
   /**

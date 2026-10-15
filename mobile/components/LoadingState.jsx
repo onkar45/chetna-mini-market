@@ -1,12 +1,16 @@
 import React from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING } from '../constants/theme';
 
-export default function LoadingState({ message = 'Loading...' }) {
+export default function LoadingState({ message }) {
+  const { t } = useTranslation();
+  const resolvedMessage = message || t('common.loading');
+
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color={COLORS.primary} />
-      <Text style={styles.text}>{message}</Text>
+      <Text style={styles.text}>{resolvedMessage}</Text>
     </View>
   );
 }

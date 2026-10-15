@@ -1,21 +1,25 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 
 export default function EmptyState({
-  title = 'No Products Found',
-  subtitle = 'Try adjusting your search query or category filter.',
+  title,
+  subtitle,
   actionLabel,
   onAction,
 }) {
+  const { t } = useTranslation();
+  const resolvedTitle = title || t('products.no_matching');
+  const resolvedSubtitle = subtitle || t('products.no_matching_sub');
   return (
     <View style={styles.container}>
       <View style={styles.iconCircle}>
         <MaterialCommunityIcons name="store-search-outline" size={48} color={COLORS.primary} />
       </View>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.subtitle}>{subtitle}</Text>
+      <Text style={styles.title}>{resolvedTitle}</Text>
+      <Text style={styles.subtitle}>{resolvedSubtitle}</Text>
       {actionLabel && onAction && (
         <TouchableOpacity style={styles.button} onPress={onAction} activeOpacity={0.8}>
           <Text style={styles.buttonText}>{actionLabel}</Text>

@@ -16,13 +16,21 @@ import { useTranslation } from 'react-i18next';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import LanguageSelector from '../components/LanguageSelector';
+import AppLogo from '../components/AppLogo';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import { API_BASE_URL } from '../constants/config';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, isAuthenticated, isLoading } = useAuth();
   const { t } = useTranslation();
+
+  // Redirect to products if user is already authenticated
+  React.useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace('/products');
+    }
+  }, [isLoading, isAuthenticated, router]);
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -79,9 +87,7 @@ export default function LoginScreen() {
 
           {/* Header Branding */}
           <View style={styles.header}>
-            <View style={styles.logoCircle}>
-              <MaterialCommunityIcons name="storefront" size={44} color={COLORS.primary} />
-            </View>
+            <AppLogo size={96} style={styles.logoWrap} />
             <Text style={styles.title}>{t('app.name')}</Text>
             <Text style={styles.tagline}>{t('app.tagline')}</Text>
             <Text style={styles.subtitle}>{t('app.login_subtitle')}</Text>
@@ -194,7 +200,7 @@ export default function LoginScreen() {
           {/* Server Connection Info */}
           <View style={styles.serverInfo}>
             <MaterialCommunityIcons name="server-network" size={13} color={COLORS.textMuted} style={{ marginRight: 4 }} />
-            <Text style={styles.serverInfoText}>API: {API_BASE_URL}</Text>
+            <Text style={styles.serverInfoText}>{t('app.server_api', { url: API_BASE_URL })}</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -220,19 +226,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: SPACING.xl,
   },
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+  logoWrap: {
     marginBottom: SPACING.md,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 2,
   },
   title: {
     fontSize: 24,

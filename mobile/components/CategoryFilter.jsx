@@ -15,7 +15,7 @@ export const DEFAULT_CATEGORIES = [
   'Household',
 ];
 
-const CATEGORY_KEYS = {
+export const CATEGORY_KEYS = {
   All: 'categories.all',
   Grocery: 'categories.grocery',
   Dairy: 'categories.dairy',
@@ -25,6 +25,29 @@ const CATEGORY_KEYS = {
   Snacks: 'categories.snacks',
   'Personal Care': 'categories.personal_care',
   Household: 'categories.household',
+};
+
+export const formatCategory = (category, t) => {
+  if (!category) return '';
+  return CATEGORY_KEYS[category] ? t(CATEGORY_KEYS[category]) : category;
+};
+
+export const UNIT_KEYS = {
+  kg: 'units.kg',
+  gram: 'units.gram',
+  litre: 'units.litre',
+  ml: 'units.ml',
+  packet: 'units.packet',
+  piece: 'units.piece',
+  box: 'units.box',
+  bottle: 'units.bottle',
+  dozen: 'units.dozen',
+};
+
+export const formatUnit = (unit, t) => {
+  if (!unit) return '';
+  const key = UNIT_KEYS[unit.toLowerCase()];
+  return key ? t(key) : unit;
 };
 
 export default function CategoryFilter({
@@ -42,7 +65,7 @@ export default function CategoryFilter({
     >
       {categories.map((cat) => {
         const isSelected = selectedCategory === cat;
-        const displayLabel = CATEGORY_KEYS[cat] ? t(CATEGORY_KEYS[cat]) : cat;
+        const displayLabel = formatCategory(cat, t);
 
         return (
           <TouchableOpacity
@@ -50,6 +73,9 @@ export default function CategoryFilter({
             style={[styles.pill, isSelected && styles.pillSelected]}
             onPress={() => onSelectCategory(cat)}
             activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isSelected }}
+            accessibilityLabel={displayLabel}
           >
             <Text style={[styles.pillText, isSelected && styles.pillTextSelected]}>
               {displayLabel}
@@ -81,8 +107,8 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   pillSelected: {
-    backgroundColor: COLORS.primaryDark,
-    borderColor: COLORS.primaryDark,
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   pillText: {
     fontSize: 13,

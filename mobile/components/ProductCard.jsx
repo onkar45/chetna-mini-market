@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { resolveImageUrl } from '../constants/config';
 import { formatCurrency } from '../services/i18n';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
+import { formatCategory, formatUnit } from './CategoryFilter';
 
 export default function ProductCard({
   product,
@@ -86,7 +87,7 @@ export default function ProductCard({
           <View style={styles.badgeRow}>
             {product.category ? (
               <View style={styles.categoryBadge}>
-                <Text style={styles.categoryBadgeText}>{product.category}</Text>
+                <Text style={styles.categoryBadgeText}>{formatCategory(product.category, t)}</Text>
               </View>
             ) : null}
 
@@ -108,7 +109,7 @@ export default function ProductCard({
             <View style={styles.priceContainer}>
               <Text style={styles.currencySymbol}>₹</Text>
               <Text style={styles.price}>{formattedRate}</Text>
-              <Text style={styles.unit}> / {product.unit}</Text>
+              <Text style={styles.unit}> / {formatUnit(product.unit, t)}</Text>
             </View>
 
             {formattedDate ? (
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
   },
   cardInactive: {
     opacity: 0.75,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: COLORS.background,
   },
   cardMain: {
     flexDirection: 'row',
@@ -151,7 +152,7 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: RADIUS.md,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: COLORS.border,
   },
   thumbnailPlaceholder: {
     width: 68,
@@ -207,7 +208,7 @@ const styles = StyleSheet.create({
     color: COLORS.primaryDark,
   },
   inactiveBadge: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: COLORS.border,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: RADIUS.sm,
@@ -236,7 +237,7 @@ const styles = StyleSheet.create({
   currencySymbol: {
     fontSize: 15,
     fontWeight: '800',
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
     marginRight: 2,
   },
   price: {
